@@ -60,7 +60,7 @@ def main():
     ext_modules = [
         Extension(
             "octomap",
-            ["octomap/octomap.pyx"],
+            ["octomap/octomap.pyx","octomap/octree2pc.cpp"],
             include_dirs=[
                 "src/octomap/octomap/include",
                 "src/octomap/dynamicEDT3D/include",

@@ -3,6 +3,7 @@ from libcpp cimport bool as cppbool
 from libc.string cimport memcpy
 from cython.operator cimport dereference as deref, preincrement as inc, address
 cimport octomap_defs as defs
+from octomap_defs cimport getPointsFromOctree
 cimport dynamicEDT3D_defs as edt
 import numpy as np
 cimport numpy as np
@@ -420,6 +421,50 @@ cdef class OcTree:
 
     read = _octree_read
 
+    def computeRayKeys(self,np.ndarray[DOUBLE_t, ndim=1] origin,
+                    np.ndarray[DOUBLE_t, ndim=1] end, list keys):
+        cdef cppbool hit
+        cdef defs.KeyRay ray
+
+        hit = self.thisptr.computeRayKeys(
+            defs.point3d(origin[0],origin[1],origin[2]),
+            defs.point3d(end[0],end[1],end[2]),
+            ray
+        )
+        if hit:
+            for k in ray:
+                key = OcTreeKey()
+                key[0] = k[0]
+                key[1] = k[1]
+                key[2] = k[2]
+                
+                keys.append(key)
+        return hit        
+
+    def getOccludedVoxels(self,np.ndarray[DOUBLE_t,ndim=1] origin,
+                                        np.ndarray[DOUBLE_t,ndim=2] end, np.ndarray[DOUBLE_t, ndim=2] all_keys):
+        cdef cppbool hit
+        cdef defs.KeyRay ray
+        cdef int i
+        keys = []
+        for i in range(end.shape[0]):
+            hit = self.thisptr.computeRayKeys(
+                defs.point3d(origin[0],origin[1],origin[2]),
+                defs.point3d(end[i][0],end[i][1],end[i][2]),
+                ray
+            )
+            print(len(keys))
+            if hit:
+                for k in ray:
+                    key = OcTreeKey()
+                    key[0] = k[0]
+                    key[1] = k[1]
+                    key[2] = k[2]
+                    if self.coordToKey(key) not in keys:
+                        keys.add(key)
+        all_keys+=keys
+        return hit
+
     def write(self, filename=None):
         """
         Write file header and complete tree to file/stream (serialization)
@@ -487,6 +532,21 @@ cdef class OcTree:
             except NullPointerException:
                 pass
         return labels
+    
+    def getLabelsFromKeys(self,list keys):
+        cdef int i
+        cdef OcTreeKey key
+        cdef OcTreeNode node
+        # -1: unknown, 0: empty, 1: occupied
+        cdef np.ndarray[np.int32_t, ndim=1] labels = \
+            np.full((len(keys),), -1, dtype=np.int32)
+        for i, key in enumerate(keys):
+            node = self.search(key)
+            try:
+                labels[i] = self.isNodeOccupied(node)
+            except NullPointerException:
+                pass
+        return labels
 
     def extractPointCloud(self):
         cdef float resolution = self.getResolution()
@@ -529,6 +589,29 @@ cdef class OcTree:
             empty_arr = np.concatenate(empty, axis=0)
         return occupied_arr, empty_arr
 
+    
+    def extractPointCloud_faster(self):
+        cdef defs.vector[defs.point3d] pcl_occupied = defs.vector[defs.point3d]()
+        cdef defs.vector[defs.point3d] pcl_empty = defs.vector[defs.point3d]()
+        
+        getPointsFromOctree(self.thisptr, pcl_occupied, pcl_empty)
+        
+        occupied_points = []
+        cdef defs.vector[defs.point3d].iterator p = pcl_occupied.begin()
+        while p!=pcl_occupied.end():
+            pt = deref(p)
+            occupied_points.append([pt.x(), pt.y(), pt.z()])
+            inc(p)
+
+        empty_points = []
+        p = pcl_empty.begin()
+        while p!=pcl_empty.end():
+            pt = deref(p)
+            empty_points.append([pt.x(), pt.y(), pt.z()])
+            inc(p)
+
+        return occupied_points,empty_points
+    
     def insertPointCloud(self,
                          np.ndarray[DOUBLE_t, ndim=2] pointcloud,
                          np.ndarray[DOUBLE_t, ndim=1] origin,

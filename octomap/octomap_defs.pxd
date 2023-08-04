@@ -23,6 +23,20 @@ cdef extern from "<sstream>" namespace "std":
         ostringstream() except +
         string str()
 
+cdef extern from "<vector>" namespace "std":
+    cdef cppclass vector[T]:
+        cppclass iterator:
+            T operator*()
+            iterator operator++()
+            bint operator==(iterator)
+            bint operator!=(iterator)
+        vector()
+        void push_back(T&)
+        T& operator[](int)
+        T& at(int)
+        iterator begin()
+        iterator end()
+        
 cdef extern from "octomap/math/Vector3.h" namespace "octomath":
     cdef cppclass Vector3:
         Vector3() except +
@@ -60,6 +74,18 @@ cdef extern from "octomap/OcTreeKey.h" namespace "octomap":
         OcTreeKey(unsigned short int a, unsigned short int b, unsigned short int c) except +
         OcTreeKey(OcTreeKey& other)
         unsigned short int& operator[](unsigned int i)
+    
+    cdef cppclass KeyRay:
+        # Constructor
+        # void addKey(const OcTreeKey& k)
+        ctypedef vector[OcTreeKey].iterator iterator
+
+        size_t size() 
+        size_t sizeMax() 
+
+        # Iterator methods
+        iterator begin()
+        iterator end()
 
 cdef extern from "include_and_setting.h" namespace "octomap":
     cdef cppclass OccupancyOcTreeBase[T]:
@@ -114,6 +140,7 @@ cdef extern from "include_and_setting.h" namespace "octomap":
         bool deleteNode(point3d& value, unsigned int depth)
         bool castRay(point3d& origin, point3d& direction, point3d& end,
                      bool ignoreUnknownCells, double maxRange)
+        bool computeRayKeys(point3d& origin, point3d& end, KeyRay& ray)
         OcTree* read(string& filename)
         OcTree* read(istream& s)
         bool write(string& filename)
@@ -192,3 +219,6 @@ cdef extern from "include_and_setting.h" namespace "octomap":
         bool isNodeCollapsible(const OcTreeNode* node)
         void deleteNodeChild(OcTreeNode *node, unsigned int childIdx)
         bool pruneNode(OcTreeNode *node)
+
+cdef extern from "include_and_setting.h":
+    void getPointsFromOctree(OcTree* tree, vector[point3d]& pcl_occupied, vector[point3d]& pcl_empty)
