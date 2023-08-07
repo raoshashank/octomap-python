@@ -8,5 +8,5 @@
 #include <octomap/OcTree.h>
 
 typedef std::vector<octomap::point3d> PointCloud;
-void getPointsFromOctree(octomap::OcTree* tree, PointCloud& pcl_occupied, PointCloud& pcl_empty);
+void getPointsFromOctree(octomap::OcTree tree, PointCloud& pcl_occupied, PointCloud& pcl_empty);
 #endif

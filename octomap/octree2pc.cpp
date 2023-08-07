@@ -38,28 +38,28 @@ using namespace std;
 using namespace octomap;
 typedef std::vector<point3d> PC;
 
-void getPointsFromOctree(OcTree* tree, PC& pcl_occupied, PC& pcl_empty){
-  unsigned int maxDepth = tree->getTreeDepth();  
+void getPointsFromOctree(OcTree tree, PC& pcl_occupied, PC& pcl_empty){
+  unsigned int maxDepth = tree.getTreeDepth();  
   // expand collapsed occupied nodes until all occupied leaves are at maximum depth
   vector<OcTreeNode*> collapsed_occ_nodes;
   do {
     collapsed_occ_nodes.clear();
-    for (OcTree::iterator it = tree->begin(); it != tree->end(); ++it)
+    for (OcTree::iterator it = tree.begin(); it != tree.end(); ++it)
     {
-      if(tree->isNodeOccupied(*it) && it.getDepth() < maxDepth)
+      if(tree.isNodeOccupied(*it) && it.getDepth() < maxDepth)
       {
         collapsed_occ_nodes.push_back(&(*it));
       }
     }
     for (vector<OcTreeNode*>::iterator it = collapsed_occ_nodes.begin(); it != collapsed_occ_nodes.end(); ++it)
     {
-      tree->expandNode(*it);
+      tree.expandNode(*it);
     }
   } while(collapsed_occ_nodes.size() > 0);
 
-  for (OcTree::iterator it = tree->begin(); it != tree->end(); ++it)
+  for (OcTree::iterator it = tree.begin(); it != tree.end(); ++it)
   {
-    if(tree->isNodeOccupied(*it))
+    if(tree.isNodeOccupied(*it))
     {
       pcl_occupied.push_back(it.getCoordinate());
     }
@@ -67,7 +67,7 @@ void getPointsFromOctree(OcTree* tree, PC& pcl_occupied, PC& pcl_empty){
         pcl_empty.push_back(it.getCoordinate());
     }
   }
-  delete tree;
+//delete tree; //delete operates on a pointer and de-allocates the memory the pointer was pointing to
   
 }
 

@@ -1,5 +1,6 @@
 from libcpp cimport bool
 from libcpp.string cimport string
+from libcpp.list cimport list
 
 cdef extern from * nogil:
     cdef T dynamic_cast[T](void *) except +   # nullptr may also indicate failure
@@ -35,7 +36,8 @@ cdef extern from "<vector>" namespace "std":
         T& operator[](int)
         T& at(int)
         iterator begin()
-        iterator end()
+        iterator end() 
+    
         
 cdef extern from "octomap/math/Vector3.h" namespace "octomath":
     cdef cppclass Vector3:
@@ -48,6 +50,7 @@ cdef extern from "octomap/math/Vector3.h" namespace "octomath":
 
 cdef extern from "octomap/octomap_types.h" namespace "octomap":
     ctypedef Vector3 point3d
+    ctypedef list[Vector3] point3d_list
 
 cdef extern from "octomap/Pointcloud.h" namespace "octomap":
     cdef cppclass Pointcloud:
@@ -219,6 +222,7 @@ cdef extern from "include_and_setting.h" namespace "octomap":
         bool isNodeCollapsible(const OcTreeNode* node)
         void deleteNodeChild(OcTreeNode *node, unsigned int childIdx)
         bool pruneNode(OcTreeNode *node)
+        void getUnknownLeafCenters(point3d_list& node_centers, point3d pmin, point3d pmax, unsigned int depth)    
 
 cdef extern from "include_and_setting.h":
-    void getPointsFromOctree(OcTree* tree, vector[point3d]& pcl_occupied, vector[point3d]& pcl_empty)
+    void getPointsFromOctree(OcTree tree, vector[point3d]& pcl_occupied, vector[point3d]& pcl_empty)

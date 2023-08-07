@@ -11,7 +11,7 @@ ctypedef np.float64_t DOUBLE_t
 ctypedef defs.OccupancyOcTreeBase[defs.OcTreeNode].tree_iterator* tree_iterator_ptr
 ctypedef defs.OccupancyOcTreeBase[defs.OcTreeNode].leaf_iterator* leaf_iterator_ptr
 ctypedef defs.OccupancyOcTreeBase[defs.OcTreeNode].leaf_bbx_iterator* leaf_bbx_iterator_ptr
-
+import time
 class NullPointerException(Exception):
     """
     Null pointer exception
@@ -25,8 +25,13 @@ cdef class OcTreeKey:
     The keys count the number of cells (voxels) from the origin as discrete address of a voxel.
     """
     cdef defs.OcTreeKey *thisptr
-    def __cinit__(self):
+    def __cinit__(self,key=None):
         self.thisptr = new defs.OcTreeKey()
+        if key!=None:
+            self.thisptr[0][0]=key[0]
+            self.thisptr[0][1]=key[1]
+            self.thisptr[0][2]=key[2]
+
     def __dealloc__(self):
         if self.thisptr:
             del self.thisptr
@@ -313,12 +318,13 @@ cdef class OcTree:
     """
     octomap main map data structure, stores 3D occupancy grid map in an OcTree.
     """
-    cdef defs.OcTree *thisptr
+    cdef defs.OcTree *thisptr #uninitialized pointer to a location of type OcTree
     cdef edt.DynamicEDTOctomap *edtptr
     def __cinit__(self, arg):
         import numbers
         if isinstance(arg, numbers.Number):
-            self.thisptr = new defs.OcTree(<double?>arg)
+            #<double?> indicates that the function is being called with EITHER a double value OR NONE (default constructor)
+            self.thisptr = new defs.OcTree(<double?>arg) # "new" operator returns a pointer to the allocated memory of the specified data type
         else:
             self.thisptr = new defs.OcTree(string(<char*?>arg))
 
@@ -365,7 +371,13 @@ cdef class OcTree:
         res[1] = key[1]
         res[2] = key[2]
         return res
-
+    '''    
+    def coordToKeyBatch(self,np.ndarray[DOUBLE_t,ndim = 2] coord):
+        return (int(np.floor(self.thisptr.resolution_factor * coord))) + self.thisptr.tree_max_val
+    
+    def keyToCoordBatch(self,np.ndarray[DOUBLE_t,ndim = 2] keys):
+        return double(int(keys) - int(self.thisptr.tree_max_val) +0.5) * self.thisptr.resolution    
+    '''
     def coordToKeyChecked(self, np.ndarray[DOUBLE_t, ndim=1] coord, depth=None):
         cdef defs.OcTreeKey key
         cdef cppbool chk
@@ -423,6 +435,7 @@ cdef class OcTree:
 
     def computeRayKeys(self,np.ndarray[DOUBLE_t, ndim=1] origin,
                     np.ndarray[DOUBLE_t, ndim=1] end, list keys):
+        #updates keys with all the voxels intersected by a ray from the origin to end
         cdef cppbool hit
         cdef defs.KeyRay ray
 
@@ -437,33 +450,54 @@ cdef class OcTree:
                 key[0] = k[0]
                 key[1] = k[1]
                 key[2] = k[2]
-                
                 keys.append(key)
         return hit        
 
-    def getOccludedVoxels(self,np.ndarray[DOUBLE_t,ndim=1] origin,
-                                        np.ndarray[DOUBLE_t,ndim=2] end, np.ndarray[DOUBLE_t, ndim=2] all_keys):
+    def getUnknownLeafCenters(self, list node_centers, np.ndarray[DOUBLE_t, ndim=1] pmin, np.ndarray[DOUBLE_t, ndim=1] pmax, int depth=0):
+        cdef defs.point3d_list nc
+        self.thisptr.getUnknownLeafCenters(
+            nc,
+            defs.point3d(pmin[0],pmin[1],pmin[2]),
+            defs.point3d(pmax[0],pmax[1],pmax[2]),
+            depth
+        )
+        for node in nc:
+            node_centers.append([node.x(),node.y(),node.z()])
+        
+        
+
+    def getOccludedVoxels(self,np.ndarray[DOUBLE_t,ndim=2] origins,
+                                        np.ndarray[DOUBLE_t,ndim=2] end, list occ_vox):
         cdef cppbool hit
         cdef defs.KeyRay ray
         cdef int i
-        keys = []
+        all_keys = []
         for i in range(end.shape[0]):
+            #st = time.time()
             hit = self.thisptr.computeRayKeys(
-                defs.point3d(origin[0],origin[1],origin[2]),
+                defs.point3d(origins[i][0],origins[i][1],origins[i][2]),
                 defs.point3d(end[i][0],end[i][1],end[i][2]),
                 ray
             )
-            print(len(keys))
+            #computing each ray takes about 5e-6 seconds           
+            #print(len(occ_vox))
+            #print(len(all_keys))
+            #extracting voxels from each ray takes upto 0.2 seconds 
+            #number of rays is equal to number of occupied voxels which is at most image_h x image_w
             if hit:
                 for k in ray:
-                    key = OcTreeKey()
-                    key[0] = k[0]
-                    key[1] = k[1]
-                    key[2] = k[2]
-                    if self.coordToKey(key) not in keys:
-                        keys.add(key)
-        all_keys+=keys
-        return hit
+                        #if len(occ_vox)==0 or not any(np.equal(np.array(occ_vox),[k[0],k[1],k[2]]).all(1)):   #check if this key has been added
+                        all_keys.append([k[0],k[1],k[2]])
+                        key = OcTreeKey([k[0],k[1],k[2]])
+                        node = self.search(key)
+                        occ = -1
+                        try:
+                            occ = self.isNodeOccupied(node)
+                        except NullPointerException as e:
+                            #print(self.keyToCoord(key))
+                            occ_vox.append(self.keyToCoord(key))
+                            pass    
+        return 0
 
     def write(self, filename=None):
         """
@@ -594,22 +628,23 @@ cdef class OcTree:
         cdef defs.vector[defs.point3d] pcl_occupied = defs.vector[defs.point3d]()
         cdef defs.vector[defs.point3d] pcl_empty = defs.vector[defs.point3d]()
         
-        getPointsFromOctree(self.thisptr, pcl_occupied, pcl_empty)
+        getPointsFromOctree(deref(self.thisptr), pcl_occupied, pcl_empty)
         
         occupied_points = []
+        empty_points = []
+       
         cdef defs.vector[defs.point3d].iterator p = pcl_occupied.begin()
         while p!=pcl_occupied.end():
             pt = deref(p)
             occupied_points.append([pt.x(), pt.y(), pt.z()])
             inc(p)
 
-        empty_points = []
         p = pcl_empty.begin()
         while p!=pcl_empty.end():
             pt = deref(p)
             empty_points.append([pt.x(), pt.y(), pt.z()])
             inc(p)
-
+        
         return occupied_points,empty_points
     
     def insertPointCloud(self,
