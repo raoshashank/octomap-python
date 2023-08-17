@@ -66,9 +66,7 @@ void getPointsFromOctree(OcTree tree, PC& pcl_occupied, PC& pcl_empty){
     else{
         pcl_empty.push_back(it.getCoordinate());
     }
-  }
-//delete tree; //delete operates on a pointer and de-allocates the memory the pointer was pointing to
-  
+  } 
 }
 
 

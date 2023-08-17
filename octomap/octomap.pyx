@@ -434,7 +434,7 @@ cdef class OcTree:
     read = _octree_read
 
     def computeRayKeys(self,np.ndarray[DOUBLE_t, ndim=1] origin,
-                    np.ndarray[DOUBLE_t, ndim=1] end, list keys):
+                    np.ndarray[DOUBLE_t, ndim=1] end, list keys, int depth=0):
         #updates keys with all the voxels intersected by a ray from the origin to end
         cdef cppbool hit
         cdef defs.KeyRay ray
@@ -467,7 +467,7 @@ cdef class OcTree:
         
 
     def getOccludedVoxels(self,np.ndarray[DOUBLE_t,ndim=2] origins,
-                                        np.ndarray[DOUBLE_t,ndim=2] end, list occ_vox):
+                                        np.ndarray[DOUBLE_t,ndim=2] end, list occ_vox,int depth =0):
         cdef cppbool hit
         cdef defs.KeyRay ray
         cdef int i
@@ -495,7 +495,12 @@ cdef class OcTree:
                             occ = self.isNodeOccupied(node)
                         except NullPointerException as e:
                             #print(self.keyToCoord(key))
-                            occ_vox.append(self.keyToCoord(key))
+                            #print("Found")
+                            c = self.keyToCoord(key)
+                            if depth!=0:
+                                j = self.coordToKey(c,self.getTreeDepth()-depth)
+                                c = self.keyToCoord(j)
+                            occ_vox.append(c)
                             pass    
         return 0
 
